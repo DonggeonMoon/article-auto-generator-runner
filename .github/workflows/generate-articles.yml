@@ -1,0 +1,64 @@
+name: Generate articles
+
+on:
+  schedule:
+    - cron: '0 13 * * *'
+  workflow_dispatch:
+
+concurrency:
+  group: generate-articles
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  generate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - name: Checkout generator
+        uses: actions/checkout@v4
+        with:
+          repository: DonggeonMoon/article-auto-generator
+          ssh-key: ${{ secrets.GENERATOR_DEPLOY_KEY }}
+          persist-credentials: false
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Install Claude Code CLI
+        run: npm install -g @anthropic-ai/claude-code
+
+      - name: Generate and upload
+        env:
+          CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          FIREBASE_API_KEY: ${{ secrets.FIREBASE_API_KEY }}
+          FIREBASE_PROJECT_ID: ${{ secrets.FIREBASE_PROJECT_ID }}
+          BOARD_ADMIN_EMAIL: ${{ secrets.EMAIL }}
+          BOARD_ADMIN_PASSWORD: ${{ secrets.PASSWORD }}
+          CLAUDE_MODEL: ${{ vars.CLAUDE_MODEL }}
+          POSTS_PER_RUN: ${{ vars.POSTS_PER_RUN }}
+          REGIONS: ${{ vars.REGIONS }}
+          BOARD_AUTHOR_NAME: ${{ vars.BOARD_AUTHOR_NAME }}
+          BOARD_AUTHOR_ROLE: ${{ vars.BOARD_AUTHOR_ROLE }}
+        run: node generate-articles.js
+
+      - name: Keep generated JSON
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: articles-${{ github.run_id }}
+          path: output/
+          if-no-files-found: ignore
+          retention-days: 7
+
+  keepalive:
+    runs-on: ubuntu-latest
+    permissions:
+      actions: write
+    steps:
+      - run: gh api -X PUT "repos/${{ github.repository }}/actions/workflows/generate-articles.yml/enable"
+        env:
+          GH_TOKEN: ${{ github.token }}

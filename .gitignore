@@ -1,0 +1,5 @@
+.env*
+.ref-src/
+node_modules/
+output/
+.work/
